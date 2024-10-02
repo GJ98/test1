@@ -1,0 +1,18 @@
+data:
+  dataset_name: squad_kor_v1
+  preprocessing_num_workers: 1
+  max_seq_length: 384
+  max_answer_length: 30
+  doc_stride: 128
+  batch_size: 2
+  n_best_size: 5
+
+model:
+  plm_name: klue/bert-base
+
+optimizer:
+  lr: 2e-5
+
+train:
+  output_dir: "./outputs"
+  num_train_epochs: 2
