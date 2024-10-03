@@ -6,6 +6,7 @@ data:
   doc_stride: 128
   batch_size: 4
   n_best_size: 5
+  num_neg: 2
 
 model:
   plm_name: klue/bert-base
@@ -16,3 +17,5 @@ optimizer:
 train:
   output_dir: "./outputs"
   num_train_epochs: 2
+
+device: cuda
