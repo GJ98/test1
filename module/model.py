@@ -19,10 +19,9 @@ class MrcLightningModule(pl.LightningModule):
         self.test_dataset = test_dataset
         self.eval_examples = eval_examples
         self.test_examples = test_examples
-        self.validation_step_outputs = []
+        self.validation_step_outputs = {'start_logits': [], 'end_logits': []}
 
         self.metric = load_metric("squad")
-
 
     def configure_optimizers(self):
         trainable_params = filter(lambda p: p.requires_grad, self.model.parameters())
@@ -30,59 +29,24 @@ class MrcLightningModule(pl.LightningModule):
 
     def training_step(self, batch):
         qa_output = self.model(**batch)
+        self.log('step_train_loss', qa_output['loss'])
         return {"loss": qa_output["loss"]}
 
     def validation_step(self, batch):
         qa_output = self.model(**batch)
-        self.validation_step_outputs.append({
-            "start_logits": qa_output["start_logits"], 
-            "end_logits": qa_output["end_logits"]
-        })
-        return {
-            "start_logits": qa_output["start_logits"], 
-            "end_logits": qa_output["end_logits"]
-        }
+        self.validation_step_outputs['start_logits'].extend(qa_output['start_logits'].cpu())
+        self.validation_step_outputs['end_logits'].extend(qa_output['end_logits'].cpu())
 
     def on_validation_epoch_end(self, ):
-        logits = []
-        start_logits = []
-        end_logits = []
-        for step_output in self.validation_step_outputs:
-            start_logits.extend(step_output['start_logits'].cpu())
-            end_logits.extend(step_output['end_logits'].cpu())
         eval_preds = self.post_processing_function(
-            self.eval_examples, self.eval_dataset, (np.array(start_logits).squeeze(), np.array(end_logits).squeeze())
+            self.eval_examples, self.eval_dataset, 
+            (np.array(self.validation_step_outputs['start_logits']).squeeze(), 
+            np.array(self.validation_step_outputs['end_logits']).squeeze())
         )
         metric = self.metric.compute(predictions=eval_preds.predictions, references=eval_preds.label_ids)
-        print(metric)
-        self.validation_step_outputs = []
-        return metric
-
-    def test_step(self, batch):
-        qa_output = self.model(**batch)
-        return {
-            "loss": qa_output["loss"], 
-            "start_logits": qa_output["start_logits"], 
-            "end_logits": qa_output["end_logits"]
-        }
-
-    def test_epoch_end(self, test_step_outputs):
-        total_loss = 0
-        logits = []
-        for step_output in test_step_outputs:
-            total_loss += step_output['loss']
-            logits.extend([
-                (start, end) for start, end in \
-                    zip(step_output['start_logits'], step_output['end_logits'])
-                ])
-
-        eval_preds = self.post_process_function(
-            self.eval_examples, self.eval_dataset, logits
-        )
-        metric = self.metric.compute(eval_preds)
-        self.log(metric)
-        self.log(total_loss)
-        return metric
+        self.validation_step_outputs = {'start_logits': [], 'end_logits': []}
+        self.log("val_em", metric["exact_match"])
+        self.log("val_f1", metric["f1"])
 
     def predict(self, context, answer):
         pass
@@ -323,18 +287,3 @@ class MrcLightningModule(pl.LightningModule):
                     writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
 
         return all_predictions
-
-
-"""
-Baseline의 train_dataset, data_collator를 가져와서
-train_dataloader = torch.utils.data.DataLoader(train_dataset, collate_fn=data_collator)
-@dataclass
-class Config:
-    plm_name: str="klue/bert-base"
-    lr: float=1e-6
-
-config = Config()
-print(config.plm_name)
-model = MRCLightning(config)
-print(model.print_model_parameters())
-"""

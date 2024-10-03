@@ -4,7 +4,7 @@ data:
   max_seq_length: 384
   max_answer_length: 30
   doc_stride: 128
-  batch_size: 2
+  batch_size: 4
   n_best_size: 5
 
 model:

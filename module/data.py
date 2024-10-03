@@ -19,8 +19,9 @@ class MrcDataModule(pl.LightningDataModule):
         self.test_examples = None
 
     def setup(self, stage='fit'):
+        if self.train_dataset and self.eval_dataset:
+            return
         datasets = load_dataset(self.config.data.dataset_name)
-        column_names = datasets['train'].column_names
         if stage == 'fit':
             self.train_examples = datasets['train'].select(range(100))
             self.eval_examples = datasets['validation'].select(range(100))
@@ -30,15 +31,16 @@ class MrcDataModule(pl.LightningDataModule):
                 self.prepare_train_features,
                 batched=True,
                 num_proc=self.config.data.preprocessing_num_workers,
-                remove_columns=column_names
+                remove_columns=datasets['train'].column_names
             )
             self.eval_dataset = self.eval_examples.map(
                 self.prepare_validation_features,
                 batched=True,
                 num_proc=self.config.data.preprocessing_num_workers,
-                remove_columns=column_names
+                remove_columns=datasets['validation'].column_names
             )
-            self.eval_dataset1 = self.eval_dataset.remove_columns("offset_mapping")
+            print(self.train_dataset)
+            print(self.eval_dataset)
             '''
             test_dataset = test_examples.map(
                 self.prepare_validation_features,
@@ -48,15 +50,24 @@ class MrcDataModule(pl.LightningDataModule):
             '''
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(self.train_dataset, batch_size=self.config.data.batch_size, collate_fn=default_data_collator, shuffle=True)
+        return torch.utils.data.DataLoader(self.train_dataset, \
+                    batch_size=self.config.data.batch_size, collate_fn=default_data_collator, shuffle=True)
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(self.eval_dataset1, collate_fn=default_data_collator, batch_size=self.config.data.batch_size)
+        return torch.utils.data.DataLoader(self.eval_dataset.remove_columns('offset_mapping'), \
+                    collate_fn=default_data_collator, batch_size=self.config.data.batch_size)
 
     def test_dataloader(self):
-        return torch.utils.data.DataLoader(self.test_dataset, collate_fn=default_data_collator, batch_size=self.config.data.batch_size)
+        return torch.utils.data.DataLoader(self.test_dataset.remove_columns('offset_mapping'), \
+                    collate_fn=default_data_collator, batch_size=self.config.data.batch_size)
 
     def prepare_train_features(self, examples):
+        """
+        Args:
+            examples: {'id', 'question', 'context', 'answers': {'answer_start', 'text'}}
+        Returns:
+            tokenized_examples: {'input_ids', 'token_type_ids', 'attention_mask', 'start_positions', 'end_positions'}
+        """
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
         # in one example possible giving several features when a context is long, each of those features having a
         # context that overlaps a bit the context of the previous feature.
@@ -94,6 +105,7 @@ class MrcDataModule(pl.LightningDataModule):
             # One example can give several spans, this is the index of the example containing this span of text.
             sample_index = sample_mapping[i]
             answers = examples["answers"][sample_index]
+            #answers = examples["answers"]
             # If no answers are given, set the cls_index as answer.
             if len(answers["answer_start"]) == 0:
                 tokenized_examples["start_positions"].append(cls_index)
@@ -130,6 +142,12 @@ class MrcDataModule(pl.LightningDataModule):
         return tokenized_examples
 
     def prepare_validation_features(self, examples):
+        """
+        Args:
+            examples: {'id', 'question', 'context', 'answers': {'answer_start', 'text'}}
+        Returns:
+            tokenized_examples: {'input_ids', 'token_type_ids', 'attention_mask', 'offset_mapping', 'example_id'}
+        """
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
         # in one example possible giving several features when a context is long, each of those features having a
         # context that overlaps a bit the context of the previous feature.
@@ -160,6 +178,7 @@ class MrcDataModule(pl.LightningDataModule):
             # One example can give several spans, this is the index of the example containing this span of text.
             sample_index = sample_mapping[i]
             tokenized_examples["example_id"].append(examples["id"][sample_index])
+            #tokenized_examples["example_id"].append(examples["id"])
 
             # Set to None the offset_mapping that are not part of the context so it's easy to determine if a token
             # position is part of the context or not.
