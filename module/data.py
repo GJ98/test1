@@ -1,13 +1,15 @@
 import os
 import torch
+import numpy as np
 import pytorch_lightning as pl
+from torch.utils.data import TensorDataset
 from transformers import AutoTokenizer, default_data_collator
 from datasets import load_dataset, load_from_disk, concatenate_datasets, DatasetDict
 from utils.data_template import get_dataset_list
 
 
 class MrcDataModule(pl.LightningDataModule):
-    ## instance 생성할 때 CFG(baseline_config 세팅) 입력
+
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -49,9 +51,7 @@ class MrcDataModule(pl.LightningDataModule):
 
         if stage == "test":
             datasets = DatasetDict()
-            datasets["test"] = concatenate_datasets([ds["test"] for ds in dataset_list])
-
-            self.test_examples = datasets['test'].select(range(100))
+            self.test_examples = concatenate_datasets([ds["test"] for ds in dataset_list]).select(range(100))
 
             self.test_dataset = self.test_examples.map(
                 self.prepare_validation_features,
@@ -200,3 +200,82 @@ class MrcDataModule(pl.LightningDataModule):
             ]
 
         return tokenized_examples
+
+class RetrieverDataModule(pl.LightningDataModule):
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
+
+        self.train_dataset = None
+        self.eval_dataset = None
+        self.test_dataset = None
+
+    def setup(self, stage='fit'):
+        dataset_list = get_dataset_list(self.config.data.dataset_name)
+
+        if stage == "fit":
+            datasets = DatasetDict()
+            for split in ['train', 'validation']:
+                datasets[split] = concatenate_datasets([ds[split] for ds in dataset_list])
+
+            train_dataset = datasets['train'].select(range(100))
+            eval_dataset = datasets['validation'].select(range(100))
+
+            self.train_dataset = self.preprocessing(train_dataset)
+            self.eval_dataset = self.preprocessing(eval_dataset)
+
+        if stage == "test":
+            test_dataset = concatenate_datasets([ds['test'] for ds in dataset_list]).select(range(100))
+            self.test_dataset = self.preprocessing(test_dataset)
+
+    def preprocessing(self, dataset):
+
+        corpus = np.array(list(set([example["context"] for example in dataset])))
+        p_with_neg = []
+
+        for context in dataset['context']:
+            while True:
+                neg_idxs = np.random.randint(len(corpus), size=self.config.data.num_neg)
+
+                if not context in corpus[neg_idxs]:
+                    p_neg = corpus[neg_idxs]
+                    p_with_neg.append(context)
+                    p_with_neg.extend(p_neg)
+                    break
+
+        q_seqs = self.tokenizer(
+            dataset["question"],
+            padding='max_length',
+            truncation=True,
+            return_tensors='pt',
+            max_length=self.config.data.max_seq_length
+        )
+
+        p_seqs = self.tokenizer(
+            p_with_neg,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+            max_length=self.config.data.max_seq_length
+        )
+
+        p_seqs["input_ids"] = p_seqs["input_ids"].view(-1, self.config.data.num_neg + 1, self.config.data.max_seq_length)
+        p_seqs["attention_mask"] = p_seqs["attention_mask"].view(-1, self.config.data.num_neg + 1, self.config.data.max_seq_length)
+        p_seqs["token_type_ids"] = p_seqs["token_type_ids"].view(-1, self.config.data.num_neg + 1, self.config.data.max_seq_length)
+
+        return TensorDataset(
+            p_seqs["input_ids"], p_seqs["attention_mask"], p_seqs["token_type_ids"],
+            q_seqs["input_ids"], q_seqs["attention_mask"], q_seqs["token_type_ids"]
+        )
+
+    def train_dataloader(self):
+        return torch.utils.data.DataLoader(self.train_dataset, \
+                    batch_size=self.config.data.batch_size, shuffle=True)
+
+    def val_dataloader(self):
+        return torch.utils.data.DataLoader(self.eval_dataset, batch_size=self.config.data.batch_size)
+
+    def test_dataloader(self):
+        return torch.utils.data.DataLoader(self.test_dataset, batch_size=self.config.data.batch_size)

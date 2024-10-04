@@ -1,6 +1,6 @@
 import pytorch_lightning as pl
 from module.data import *
-from module.model import *
+from module.mrc import *
 import hydra
 
 
