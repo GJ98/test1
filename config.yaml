@@ -1,5 +1,5 @@
 data:
-  dataset_name: squad_kor_v1
+  dataset_name: [klue_mrc, squad_kor_v1]
   preprocessing_num_workers: 1
   max_seq_length: 384
   max_answer_length: 30

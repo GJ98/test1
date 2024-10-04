@@ -6,12 +6,14 @@ import torch
 import pytorch_lightning as pl
 from transformers import AutoModelForQuestionAnswering, EvalPrediction, RobertaForQuestionAnswering
 from datasets import load_metric, load_dataset
+from datasets import load_dataset, load_from_disk, concatenate_datasets, DatasetDict
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from transformers import AutoTokenizer, BertPreTrainedModel, BertModel
 from torch.utils.data import DataLoader, RandomSampler, TensorDataset
 import torch.nn.functional as F
 
+from utils.data_template import get_dataset_list
 
 class TfIdfRetriever:
 
@@ -54,8 +56,9 @@ class DenseRetriever:
         self.p_encoder = p_encoder.to(self.config.device)
 
     def prepare_data(self, ):
-        dataset = load_dataset(self.config.data.dataset_name)
-        train_dataset = dataset['train'].select(range(100))
+        dataset_list = get_dataset_list(self.config.data.dataset_name)
+
+        train_dataset = concatenate_datasets([ds["train"] for ds in dataset_list]).select(range(100))
         corpus = np.array(list(set([example["context"] for example in train_dataset])))
         p_with_neg = []
 
@@ -148,8 +151,9 @@ class DenseRetriever:
             
     def make_dense_embedding_matrix(self, ):
         self.p_encoder.eval()
-        dataset = load_dataset(self.config.data.dataset_name)
-        eval_dataset = dataset['validation'].select(range(100))
+        dataset_list = get_dataset_list(self.config.data.dataset_name)
+
+        eval_dataset = concatenate_datasets([ds["validation"] for ds in dataset_list]).select(range(100))
         self.eval_corpus = list(set([example["context"] for example in eval_dataset]))
 
         p_embs = []

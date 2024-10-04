@@ -1,7 +1,9 @@
+import os
 import torch
 import pytorch_lightning as pl
 from transformers import AutoTokenizer, default_data_collator
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk, concatenate_datasets, DatasetDict
+from utils.data_template import get_dataset_list
 
 
 class MrcDataModule(pl.LightningDataModule):
@@ -19,13 +21,16 @@ class MrcDataModule(pl.LightningDataModule):
         self.test_examples = None
 
     def setup(self, stage='fit'):
-        if self.train_dataset and self.eval_dataset:
-            return
-        datasets = load_dataset(self.config.data.dataset_name)
+
+        dataset_list = get_dataset_list(self.config.data.dataset_name)
+
         if stage == 'fit':
+            datasets = DatasetDict()
+            for split in ['train', 'validation']:
+                datasets[split] = concatenate_datasets([ds[split] for ds in dataset_list])
+
             self.train_examples = datasets['train'].select(range(100))
             self.eval_examples = datasets['validation'].select(range(100))
-            #test_examples = datasets['test'].select(range(100))
 
             self.train_dataset = self.train_examples.map(
                 self.prepare_train_features,
@@ -41,13 +46,20 @@ class MrcDataModule(pl.LightningDataModule):
             )
             print(self.train_dataset)
             print(self.eval_dataset)
-            '''
-            test_dataset = test_examples.map(
+
+        if stage == "test":
+            datasets = DatasetDict()
+            datasets["test"] = concatenate_datasets([ds["test"] for ds in dataset_list])
+
+            self.test_examples = datasets['test'].select(range(100))
+
+            self.test_dataset = self.test_examples.map(
                 self.prepare_validation_features,
+                batched=True,
                 num_proc=self.config.data.preprocessing_num_workers,
-                remove_columns=column_names
+                remove_columns=datasets['test'].column_names
             )
-            '''
+            print(self.test_dataset)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(self.train_dataset, \
