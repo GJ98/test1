@@ -13,6 +13,8 @@ from transformers import AutoTokenizer, BertPreTrainedModel, BertModel
 from torch.utils.data import DataLoader, RandomSampler, TensorDataset
 import torch.nn.functional as F
 import torchmetrics
+import module.loss as module_loss
+from utils.common import init_obj
 
 from utils.data_template import get_dataset_list
 
@@ -21,7 +23,7 @@ class TfIdfRetriever:
     def __init__(self, config):
         self.config = config
         self.contexts = self.prepare_contexts()
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.retriever_plm_name)
         self.vectorizer = TfidfVectorizer(
             tokenizer=lambda x: self.tokenizer.tokenize(x),
             ngram_range=(1, 2)
@@ -57,20 +59,24 @@ class DenseRetriever(pl.LightningModule):
     def __init__(self, config, q_encoder, p_encoder):
         super().__init__()
         self.config = config
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.retriever_plm_name)
         self.q_encoder = q_encoder.to(self.config.device)
         self.p_encoder = p_encoder.to(self.config.device)
         self.dense_embedding_matrix = None
+        self.criterion = getattr(module_loss, self.config.loss)
         self.accuracy = torchmetrics.classification.Accuracy(task="multiclass", num_classes=self.config.data.num_neg+1)
 
 
     def configure_optimizers(self, ):
-        trainable_params1 = filter(lambda p: p.requires_grad, self.q_encoder.parameters())
-        trainable_params2 = filter(lambda p: p.requires_grad, self.p_encoder.parameters())
-        return torch.optim.AdamW([
-                {"params": trainable_params1},
-                {"params": trainable_params2},
-            ], **(self.config.optimizer))
+        trainable_params1 = list(filter(lambda p: p.requires_grad, self.q_encoder.parameters()))
+        trainable_params2 = list(filter(lambda p: p.requires_grad, self.p_encoder.parameters()))
+        trainable_params = [{"params": trainable_params1}, {"params": trainable_params2}]
+
+        optimizer_name = self.config.optimizer.name
+        del self.config.optimizer.name
+        optimizer = init_obj(optimizer_name, self.config.optimizer, 
+                             torch.optim, trainable_params)
+        return optimizer
 
     def training_step(self, batch):
         targets = torch.zeros(self.config.data.batch_size).long().to(self.config.device)
@@ -96,7 +102,7 @@ class DenseRetriever(pl.LightningModule):
         similarity_scores = torch.bmm(q_outputs, p_outputs.transpose(-2, -1)).squeeze()
         similarity_scores= F.log_softmax(similarity_scores, dim=-1)
 
-        loss = F.nll_loss(similarity_scores, targets)
+        loss = self.criterion(similarity_scores, targets)
         return {"loss": loss}
             
     def validation_step(self, batch):
@@ -123,7 +129,7 @@ class DenseRetriever(pl.LightningModule):
         similarity_scores = torch.bmm(q_outputs, p_outputs.transpose(-2, -1)).squeeze()
         similarity_scores= F.log_softmax(similarity_scores, dim=-1)
 
-        loss = F.nll_loss(similarity_scores, targets)
+        loss = self.criterion(similarity_scores, targets)
         accuracy = self.accuracy(similarity_scores, targets)
         return {"loss": loss, "accuracy": accuracy}
 

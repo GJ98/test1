@@ -9,9 +9,17 @@ data:
   num_neg: 2
 
 model:
-  plm_name: klue/bert-base
+  retriever_plm_name: klue/bert-base
+  mrc_plm_name: klue/bert-base
+
+loss: nll_loss
+
+metric:
+  mrc: [squad, bleu]
+  retriever: []
 
 optimizer:
+  name: AdamW
   lr: 2e-5
 
 train:

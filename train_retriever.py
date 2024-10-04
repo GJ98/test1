@@ -10,8 +10,8 @@ def main(config):
 
     data_module = RetrieverDataModule(config)
 
-    p_encoder = BertEncoder.from_pretrained(config.model.plm_name)
-    q_encoder = BertEncoder.from_pretrained(config.model.plm_name)
+    p_encoder = BertEncoder.from_pretrained(config.model.retriever_plm_name)
+    q_encoder = BertEncoder.from_pretrained(config.model.retriever_plm_name)
     retriever = DenseRetriever(config, q_encoder, p_encoder)
 
     # gpu가 없으면 accelerator="cpu"로 변경해주세요, gpu가 여러개면 'devices=4'처럼 사용하실 gpu의 개수를 입력해주세요

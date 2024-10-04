@@ -13,7 +13,7 @@ class MrcDataModule(pl.LightningDataModule):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.mrc_plm_name)
 
         self.train_dataset = None
         self.eval_dataset = None
@@ -206,7 +206,7 @@ class RetrieverDataModule(pl.LightningDataModule):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.retriever_plm_name)
 
         self.train_dataset = None
         self.eval_dataset = None

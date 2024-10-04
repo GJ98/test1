@@ -5,7 +5,9 @@ import numpy as np
 import torch
 import pytorch_lightning as pl
 from transformers import AutoModelForQuestionAnswering, EvalPrediction, RobertaForQuestionAnswering
-from datasets import load_metric
+from evaluate import load
+from utils.common import init_obj
+import module.metric as module_metric
 
 
 logger = logging.getLogger(__name__)
@@ -14,18 +16,22 @@ class MrcLightningModule(pl.LightningModule):
     def __init__(self, config, eval_dataset=None, test_dataset=None, eval_examples=None, test_examples=None):
         super().__init__()
         self.config = config
-        self.model = AutoModelForQuestionAnswering.from_pretrained(self.config.model.plm_name)
+        self.model = AutoModelForQuestionAnswering.from_pretrained(self.config.model.mrc_plm_name)
         self.eval_dataset = eval_dataset
         self.test_dataset = test_dataset
         self.eval_examples = eval_examples
         self.test_examples = test_examples
         self.validation_step_outputs = {'start_logits': [], 'end_logits': []}
-
-        self.metric = load_metric("squad")
+        self.metric_list = {metric: {"method": load(metric), "format": getattr(module_metric, metric)} for metric in self.config.metric.mrc}
 
     def configure_optimizers(self):
-        trainable_params = filter(lambda p: p.requires_grad, self.model.parameters())
-        return torch.optim.AdamW(trainable_params, lr=self.config.optimizer.lr)
+        trainable_params = list(filter(lambda p: p.requires_grad, self.model.parameters()))
+
+        optimizer_name = self.config.optimizer.name
+        del self.config.optimizer.name
+        optimizer = init_obj(optimizer_name, self.config.optimizer, 
+                             torch.optim, trainable_params)
+        return optimizer
 
     def training_step(self, batch):
         qa_output = self.model(**batch)
@@ -43,10 +49,14 @@ class MrcLightningModule(pl.LightningModule):
             (np.array(self.validation_step_outputs['start_logits']).squeeze(), 
             np.array(self.validation_step_outputs['end_logits']).squeeze())
         )
-        metric = self.metric.compute(predictions=eval_preds.predictions, references=eval_preds.label_ids)
+
+        #compute metric
+        for name, _metric in self.metric_list.items():
+            pred, ref = _metric['format'](eval_preds)
+            metric_result = _metric['method'].compute(predictions=pred, references=ref)
+            print(name, metric_result)
         self.validation_step_outputs = {'start_logits': [], 'end_logits': []}
-        self.log("val_em", metric["exact_match"])
-        self.log("val_f1", metric["f1"])
+
 
     def predict(self, context, answer):
         pass

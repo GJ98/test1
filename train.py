@@ -13,7 +13,6 @@ def main(config):
     test_dataset = data_module.test_dataset
     eval_examples = data_module.eval_examples
     test_examples = data_module.test_examples
-    print('test_examples')
  
     model_module = MrcLightningModule(config, eval_dataset, test_dataset, eval_examples, test_examples)
 
