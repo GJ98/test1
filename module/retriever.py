@@ -17,6 +17,9 @@ import module.loss as module_loss
 from utils.common import init_obj
 
 from utils.data_template import get_dataset_list
+from evaluate import load
+from utils.common import init_obj
+import module.metric as module_metric
 
 class TfIdfRetriever:
 
@@ -59,13 +62,13 @@ class DenseRetriever(pl.LightningModule):
     def __init__(self, config, q_encoder, p_encoder):
         super().__init__()
         self.config = config
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.retriever_plm_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.encoder_plm_name)
         self.q_encoder = q_encoder.to(self.config.device)
         self.p_encoder = p_encoder.to(self.config.device)
         self.dense_embedding_matrix = None
         self.criterion = getattr(module_loss, self.config.loss)
-        self.accuracy = torchmetrics.classification.Accuracy(task="multiclass", num_classes=self.config.data.num_neg+1)
-
+        self.validation_step_outputs = {'sim_score': [], 'targets': []}
+        self.metric_list = {metric: {"method": load(metric), "format": getattr(module_metric, metric)} for metric in self.config.metric.retriever}
 
     def configure_optimizers(self, ):
         trainable_params1 = list(filter(lambda p: p.requires_grad, self.q_encoder.parameters()))
@@ -127,11 +130,21 @@ class DenseRetriever(pl.LightningModule):
         q_outputs = q_outputs.view(self.config.data.batch_size, 1, -1)
 
         similarity_scores = torch.bmm(q_outputs, p_outputs.transpose(-2, -1)).squeeze()
-        similarity_scores= F.log_softmax(similarity_scores, dim=-1)
+        similarity_scores = F.log_softmax(similarity_scores, dim=-1)
 
-        loss = self.criterion(similarity_scores, targets)
-        accuracy = self.accuracy(similarity_scores, targets)
-        return {"loss": loss, "accuracy": accuracy}
+        self.validation_step_outputs['sim_score'].extend(similarity_scores.cpu())
+        self.validation_step_outputs['targets'].extend(targets.cpu())
+
+    def on_validation_epoch_end(self, ):
+        for k, v in self.validation_step_outputs.items():
+            self.validation_step_outputs[k] = np.array(v).squeeze()
+
+        # compute metric
+        for name, metric in self.metric_list.items():
+            output_format = metric['format'](self.validation_step_outputs)
+            metric_result = metric['method'].compute(**output_format)
+            print(name, metric_result)
+        self.validation_step_outputs = {'sim_score': [], 'targets': []}
 
     def create_embedding_vector(self, ):
         self.p_encoder.eval()

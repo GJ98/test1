@@ -51,12 +51,11 @@ class MrcLightningModule(pl.LightningModule):
         )
 
         #compute metric
-        for name, _metric in self.metric_list.items():
-            pred, ref = _metric['format'](eval_preds)
-            metric_result = _metric['method'].compute(predictions=pred, references=ref)
+        for name, metric in self.metric_list.items():
+            output_format = metric['format'](eval_preds)
+            metric_result = metric['method'].compute(**output_format)
             print(name, metric_result)
         self.validation_step_outputs = {'start_logits': [], 'end_logits': []}
-
 
     def predict(self, context, answer):
         pass

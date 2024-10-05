@@ -1,17 +1,17 @@
 import pytorch_lightning as pl
-from module.data import *
+import module.data as module_data
 from module.retriever import DenseRetriever
-from module.encoder import BertEncoder
+import module.encoder as module_encoder
 import hydra
 
 
 @hydra.main(config_path=".", config_name="config", version_base=None)
 def main(config):
 
-    data_module = RetrieverDataModule(config)
+    data_module = getattr(module_data, config.data.retriever_data_module)(config)
 
-    p_encoder = BertEncoder.from_pretrained(config.model.retriever_plm_name)
-    q_encoder = BertEncoder.from_pretrained(config.model.retriever_plm_name)
+    p_encoder = getattr(module_encoder, config.model.encoder).from_pretrained(config.model.encoder_plm_name)
+    q_encoder = getattr(module_encoder, config.model.encoder).from_pretrained(config.model.encoder_plm_name)
     retriever = DenseRetriever(config, q_encoder, p_encoder)
 
     # gpu가 없으면 accelerator="cpu"로 변경해주세요, gpu가 여러개면 'devices=4'처럼 사용하실 gpu의 개수를 입력해주세요

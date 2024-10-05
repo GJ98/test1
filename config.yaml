@@ -1,4 +1,6 @@
 data:
+  mrc_data_module: MrcDataModule
+  retriever_data_module: RetrieverDataModule
   dataset_name: [klue_mrc, squad_kor_v1]
   preprocessing_num_workers: 1
   max_seq_length: 384
@@ -9,14 +11,16 @@ data:
   num_neg: 2
 
 model:
-  retriever_plm_name: klue/bert-base
+  encoder_plm_name: klue/bert-base
+  encoder: BertEncoder
   mrc_plm_name: klue/bert-base
+
 
 loss: nll_loss
 
 metric:
   mrc: [squad, bleu]
-  retriever: []
+  retriever: [accuracy, f1]
 
 optimizer:
   name: AdamW

@@ -1,12 +1,14 @@
 import pytorch_lightning as pl
-from module.data import *
+import module.data as module_data
 from module.mrc import *
+from utils.common import init_obj
 import hydra
 
 
 @hydra.main(config_path=".", config_name="config", version_base=None)
 def main(config):
-    data_module = MrcDataModule(config)
+
+    data_module = getattr(module_data, config.data.mrc_data_module)(config)
     data_module.setup()
 
     eval_dataset = data_module.eval_dataset
