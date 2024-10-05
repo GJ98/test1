@@ -1,0 +1,18 @@
+program: train_retrieval.py
+method: bayes
+metric:
+  name: accuracy
+  goal: maximize
+parameters:
+  optimizer.lr:
+    distribution: uniform
+    min: 1e-5
+    max: 3e-5
+  data.batch_size:
+    values: [1, 2, 4]
+
+command:
+- ${env}
+- ${interpreter}
+- ${program}
+- ${args_no_hyphens}

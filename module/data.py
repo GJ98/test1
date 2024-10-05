@@ -13,7 +13,7 @@ class MrcDataModule(pl.LightningDataModule):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.mrc_plm_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
 
         self.train_dataset = None
         self.eval_dataset = None
@@ -201,18 +201,19 @@ class MrcDataModule(pl.LightningDataModule):
 
         return tokenized_examples
 
-class RetrieverDataModule(pl.LightningDataModule):
+class RetrievalDataModule(pl.LightningDataModule):
 
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.encoder_plm_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
 
         self.train_dataset = None
         self.eval_dataset = None
         self.test_dataset = None
 
     def setup(self, stage='fit'):
+
         dataset_list = get_dataset_list(self.config.data.dataset_name)
 
         if stage == "fit":

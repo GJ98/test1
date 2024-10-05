@@ -21,12 +21,12 @@ from evaluate import load
 from utils.common import init_obj
 import module.metric as module_metric
 
-class TfIdfRetriever:
+class TfIdfRetrieval:
 
     def __init__(self, config):
         self.config = config
         self.contexts = self.prepare_contexts()
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.retriever_plm_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
         self.vectorizer = TfidfVectorizer(
             tokenizer=lambda x: self.tokenizer.tokenize(x),
             ngram_range=(1, 2)
@@ -57,18 +57,18 @@ class TfIdfRetriever:
         return doc_scores[:k], doc_ids[:k], self.contexts[doc_ids[:k]]
 
 
-class DenseRetriever(pl.LightningModule):
+class DenseRetrieval(pl.LightningModule):
 
     def __init__(self, config, q_encoder, p_encoder):
         super().__init__()
         self.config = config
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.encoder_plm_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
         self.q_encoder = q_encoder.to(self.config.device)
         self.p_encoder = p_encoder.to(self.config.device)
         self.dense_embedding_matrix = None
         self.criterion = getattr(module_loss, self.config.loss)
         self.validation_step_outputs = {'sim_score': [], 'targets': []}
-        self.metric_list = {metric: {"method": load(metric), "format": getattr(module_metric, metric)} for metric in self.config.metric.retriever}
+        self.metric_list = {metric: {"method": load(metric), "wrapper": getattr(module_metric, metric)} for metric in self.config.metric}
 
     def configure_optimizers(self, ):
         trainable_params1 = list(filter(lambda p: p.requires_grad, self.q_encoder.parameters()))
@@ -106,6 +106,7 @@ class DenseRetriever(pl.LightningModule):
         similarity_scores= F.log_softmax(similarity_scores, dim=-1)
 
         loss = self.criterion(similarity_scores, targets)
+        self.log('step_train_loss', loss)
         return {"loss": loss}
             
     def validation_step(self, batch):
@@ -141,9 +142,9 @@ class DenseRetriever(pl.LightningModule):
 
         # compute metric
         for name, metric in self.metric_list.items():
-            output_format = metric['format'](self.validation_step_outputs)
-            metric_result = metric['method'].compute(**output_format)
-            print(name, metric_result)
+            metric_result = metric['wrapper'](self.validation_step_outputs, metric['method'])
+            for k, v in metric_result.items():
+                self.log(k, v)
         self.validation_step_outputs = {'sim_score': [], 'targets': []}
 
     def create_embedding_vector(self, ):

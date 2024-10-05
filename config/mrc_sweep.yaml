@@ -1,0 +1,18 @@
+program: train_mrc.py
+method: bayes
+metric:
+  name: exact_match
+  goal: maximize
+parameters:
+  optimizer.lr:
+    distribution: uniform
+    min: 1e-5
+    max: 3e-5
+  data.batch_size:
+    values: [16, 32, 64]
+
+command:
+- ${env}
+- ${interpreter}
+- ${program}
+- ${args_no_hyphens}

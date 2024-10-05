@@ -1,0 +1,28 @@
+data:
+  data_module: MrcDataModule
+  dataset_name: [klue_mrc]
+  preprocessing_num_workers: 1
+  max_seq_length: 384
+  max_answer_length: 30
+  doc_stride: 128
+  batch_size: 16
+  n_best_size: 5
+
+model:
+  plm_name: klue/bert-base
+
+metric: [squad, bleu]
+
+optimizer:
+  name: AdamW
+  lr: 2e-5
+
+train:
+  output_dir: "./outputs"
+  num_train_epochs: 2
+
+wandb:
+  enable: true
+  project: test
+
+device: cuda

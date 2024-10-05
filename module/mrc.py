@@ -16,13 +16,13 @@ class MrcLightningModule(pl.LightningModule):
     def __init__(self, config, eval_dataset=None, test_dataset=None, eval_examples=None, test_examples=None):
         super().__init__()
         self.config = config
-        self.model = AutoModelForQuestionAnswering.from_pretrained(self.config.model.mrc_plm_name)
+        self.model = AutoModelForQuestionAnswering.from_pretrained(self.config.model.plm_name)
         self.eval_dataset = eval_dataset
         self.test_dataset = test_dataset
         self.eval_examples = eval_examples
         self.test_examples = test_examples
         self.validation_step_outputs = {'start_logits': [], 'end_logits': []}
-        self.metric_list = {metric: {"method": load(metric), "format": getattr(module_metric, metric)} for metric in self.config.metric.mrc}
+        self.metric_list = {metric: {"method": load(metric), "wrapper": getattr(module_metric, metric)} for metric in self.config.metric}
 
     def configure_optimizers(self):
         trainable_params = list(filter(lambda p: p.requires_grad, self.model.parameters()))
@@ -36,7 +36,7 @@ class MrcLightningModule(pl.LightningModule):
     def training_step(self, batch):
         qa_output = self.model(**batch)
         self.log('step_train_loss', qa_output['loss'])
-        return {"loss": qa_output["loss"]}
+        return {"loss": qa_output['loss']}
 
     def validation_step(self, batch):
         qa_output = self.model(**batch)
@@ -52,9 +52,9 @@ class MrcLightningModule(pl.LightningModule):
 
         #compute metric
         for name, metric in self.metric_list.items():
-            output_format = metric['format'](eval_preds)
-            metric_result = metric['method'].compute(**output_format)
-            print(name, metric_result)
+            metric_result = metric['wrapper'](eval_preds, metric['method'])
+            for k, v in metric_result.items():
+                self.log(k, v)
         self.validation_step_outputs = {'start_logits': [], 'end_logits': []}
 
     def predict(self, context, answer):
