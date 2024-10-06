@@ -4,3 +4,5 @@ outputs/
 data/
 test/
 wandb/
+tfidf/
+tfidf.py

@@ -5,7 +5,7 @@ PROJECT_NAME="test"
 SWEEP_CONFIG="./config/retrieval_sweep.yaml"
 COUNT=2
 
-use_sweep=true
+use_sweep=false
 
 # 1. Check huggingface-cli login status
 login_status=$(huggingface-cli whoami)

@@ -59,3 +59,6 @@
 - [x] `wandb` 연결하기
 - [x] `sweep` 설정 구현하기
 - [ ] output 형식 맞추기
+
+
+validation에 loss 추가하기

@@ -5,8 +5,9 @@ import numpy as np
 import torch
 import pytorch_lightning as pl
 from transformers import AutoModelForQuestionAnswering, EvalPrediction, RobertaForQuestionAnswering
-from datasets import load_metric, load_dataset
+from datasets import load_metric, load_dataset, Dataset
 from datasets import load_dataset, load_from_disk, concatenate_datasets, DatasetDict
+import pickle
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from transformers import AutoTokenizer, BertPreTrainedModel, BertModel
@@ -28,34 +29,57 @@ class TfIdfRetrieval:
         self.contexts = self.prepare_contexts()
         self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
         self.vectorizer = TfidfVectorizer(
-            tokenizer=lambda x: self.tokenizer.tokenize(x),
-            ngram_range=(1, 2)
+            tokenizer=self.tokenizer.tokenize,
+            ngram_range=(1, 2),
+            max_features=50000
         )
         self.sparse_embedding_matrix = None
 
     def prepare_contexts(self, ):
-        with open(self.data.data_path, 'r') as file:
+        parent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        context_data_path = f"{parent_directory}/{self.config.tfidf.data_path}"
+        with open(context_data_path, 'r', encoding='utf-8') as file:
             data = json.load(file)
-        return [data[f"{i}"]["text"] for i in range(len(data))]
+        return np.array(list(dict.fromkeys([v["text"] for v in data.values()])))
 
     def fit(self, ):
-        self.vectorizer.fit(self.contexts)
-        self.sparse_embedding_matrix = self.vectorizer.transform(self.contexts)
+        parent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        tfidfv_model_path = f"{parent_directory}/{self.config.tfidf.model_path}"
+
+        if os.path.isfile(tfidfv_model_path):
+            with open(tfidfv_model_path, "rb") as file:
+                self.vectorizer = pickle.load(file)
+        else:
+            self.vectorizer.fit(self.contexts)
+            with open(tfidfv_model_path, "wb") as file:
+                pickle.dump(self.vectorizer, file)
 
     def create_embedding_vector(self, ):
-        self.sparse_embedding_matrix = self.vectorizer.transform(self.contexts)
+        parent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        tfidfv_emb_path = f"{parent_directory}/{self.config.tfidf.emb_path}"
+
+        if os.path.isfile(tfidfv_emb_path):
+            with open(tfidfv_emb_path, "rb") as file:
+                self.sparse_embedding_matrix = pickle.load(file)
+
+        else:
+            self.sparse_embedding_matrix = self.vectorizer.transform(self.contexts)
+            with open(tfidfv_emb_path, "wb") as file:
+                pickle.dump(self.sparse_embedding_matrix, file)
         
-    def add(self, ):
-        pass
-
     def search(self, query, k=1):
-        query_vector = self.vectorizer.transform([query])
+        if isinstance(query, str):
+            query = [query]
+        
+        doc_scores, docs = [], []
+        query_vector = self.vectorizer.transform(query)
         similarity = query_vector * self.sparse_embedding_matrix.T
-        sorted_result = np.argsort(-similarity.data)
-        doc_scores = similarity.data[sorted_result]
-        doc_ids = similarity.indices[sorted_result]
-        return doc_scores[:k], doc_ids[:k], self.contexts[doc_ids[:k]]
+        for i in range(len(query)):
+            sorted_idx = np.argsort(-similarity[i].data)
+            doc_scores.append(similarity[i].data[sorted_idx][:k])
+            docs.append(list(self.contexts[similarity.indices[sorted_idx][:k]]))
 
+        return doc_scores, list(np.array(docs).squeeze())
 
 class DenseRetrieval(pl.LightningModule):
 
@@ -169,8 +193,8 @@ class DenseRetrieval(pl.LightningModule):
         query_vector = self.q_encoder(**query_token)
 
         similarity_score = torch.matmul(query_vector, self.dense_embedding_matrix).squeeze()
-        sorted_result = torch.argsort(similarity_score, dim=-1, descending=True).squeeze()
-        doc_scores = similarity_score[sorted_result]
+        sorted_idx = torch.argsort(similarity_score, dim=-1, descending=True).squeeze()
+        doc_scores = similarity_score[sorted_idx]
 
-        return doc_scores[:k], sorted_result[:k], self.eval_corpus[sorted_result[:k]]
+        return doc_scores[:k], self.eval_corpus[sorted_idx[:k]]
 

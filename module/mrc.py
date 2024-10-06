@@ -4,7 +4,7 @@ from tqdm.auto import tqdm
 import numpy as np
 import torch
 import pytorch_lightning as pl
-from transformers import AutoModelForQuestionAnswering, EvalPrediction, RobertaForQuestionAnswering
+from transformers import AutoModelForQuestionAnswering, EvalPrediction, RobertaForQuestionAnswering, AutoTokenizer
 from evaluate import load
 from utils.common import init_obj
 import module.metric as module_metric
@@ -15,8 +15,10 @@ logger = logging.getLogger(__name__)
 class MrcLightningModule(pl.LightningModule):
     def __init__(self, config, eval_dataset=None, test_dataset=None, eval_examples=None, test_examples=None):
         super().__init__()
+        self.save_hyperparameters()
         self.config = config
         self.model = AutoModelForQuestionAnswering.from_pretrained(self.config.model.plm_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
         self.eval_dataset = eval_dataset
         self.test_dataset = test_dataset
         self.eval_examples = eval_examples
@@ -49,12 +51,25 @@ class MrcLightningModule(pl.LightningModule):
             (np.array(self.validation_step_outputs['start_logits']).squeeze(), 
             np.array(self.validation_step_outputs['end_logits']).squeeze())
         )
+        self.validation_step_outputs = {'start_logits': [], 'end_logits': []}
 
         #compute metric
         for name, metric in self.metric_list.items():
             metric_result = metric['wrapper'](eval_preds, metric['method'])
             for k, v in metric_result.items():
                 self.log(k, v)
+
+    def test_step(self, batch):
+        qa_output = self.model(**batch)
+        self.validation_step_outputs['start_logits'].extend(qa_output['start_logits'].cpu())
+        self.validation_step_outputs['end_logits'].extend(qa_output['end_logits'].cpu())
+
+    def on_test_epoch_end(self, ):
+        self.post_processing_function(
+            self.eval_examples, self.eval_dataset, 
+            (np.array(self.validation_step_outputs['start_logits']).squeeze(), 
+            np.array(self.validation_step_outputs['end_logits']).squeeze())
+        )
         self.validation_step_outputs = {'start_logits': [], 'end_logits': []}
 
     def predict(self, context, answer):
@@ -71,6 +86,8 @@ class MrcLightningModule(pl.LightningModule):
             output_dir=self.config.train.output_dir,
             prefix=stage,
         )
+        if not "answers" in examples.column_names:
+            return None
 
         formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
         references = [{"id": ex["id"], "answers": ex["answers"]} for ex in examples]

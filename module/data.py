@@ -33,33 +33,24 @@ class MrcDataModule(pl.LightningDataModule):
 
             self.train_examples = datasets['train'].select(range(100))
             self.eval_examples = datasets['validation'].select(range(100))
-
-            self.train_dataset = self.train_examples.map(
-                self.prepare_train_features,
-                batched=True,
-                num_proc=self.config.data.preprocessing_num_workers,
-                remove_columns=datasets['train'].column_names
-            )
-            self.eval_dataset = self.eval_examples.map(
-                self.prepare_validation_features,
-                batched=True,
-                num_proc=self.config.data.preprocessing_num_workers,
-                remove_columns=datasets['validation'].column_names
-            )
+            self.train_dataset = self.get_dataset(self.train_examples, self.prepare_train_features)
+            self.eval_dataset = self.get_dataset(self.eval_examples, self.prepare_validation_features)
             print(self.train_dataset)
             print(self.eval_dataset)
 
         if stage == "test":
             datasets = DatasetDict()
             self.test_examples = concatenate_datasets([ds["test"] for ds in dataset_list]).select(range(100))
-
-            self.test_dataset = self.test_examples.map(
-                self.prepare_validation_features,
-                batched=True,
-                num_proc=self.config.data.preprocessing_num_workers,
-                remove_columns=datasets['test'].column_names
-            )
+            self.test_dataset = self.get_dataset(self.test_examples, self.prepare_validation_features)
             print(self.test_dataset)
+
+    def get_dataset(self, examples, preprocess_func):
+        return examples.map(
+            preprocess_func,
+            batched=True,
+            num_proc=self.config.data.preprocessing_num_workers,
+            remove_columns=examples.column_names
+        )
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(self.train_dataset, \

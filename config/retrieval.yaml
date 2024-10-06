@@ -1,29 +1,37 @@
-data:
-  data_module: RetrievalDataModule
-  dataset_name: [klue_mrc, squad_kor_v1]
-  preprocessing_num_workers: 1
-  max_seq_length: 384
-  batch_size: 4
-  num_neg: 2
+retrieval: 
+  data:
+    data_module: RetrievalDataModule
+    dataset_name: [klue_mrc, squad_kor_v1]
+    preprocessing_num_workers: 1
+    max_seq_length: 384
+    batch_size: 4
+    num_neg: 2
 
-model:
-  plm_name: klue/bert-base
-  encoder: BertEncoder
+  model:
+    plm_name: klue/bert-base
+    encoder: BertEncoder
 
-loss: nll_loss
+  loss: nll_loss
 
-metric: [accuracy, f1]
+  metric: [accuracy, f1]
 
-optimizer:
-  name: AdamW
-  lr: 2e-5
+  optimizer:
+    name: AdamW
+    lr: 2e-5
 
-train:
-  output_dir: "./outputs"
-  num_train_epochs: 2
+  train:
+    output_dir: "./outputs"
+    num_train_epochs: 3
 
-wandb:
-  enable: true
-  project: test
+  wandb:
+    enable: true
+    project: test
 
-device: cuda
+  device: cuda
+
+
+  tfidf:
+    model_path: tfidf/wiki_model.bin
+    emb_path: tfidf/wiki_emb.bin
+    data_path: data/wikipedia_documents.json
+    plm_name: "klue/bert-base"
