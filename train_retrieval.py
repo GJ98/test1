@@ -17,7 +17,6 @@ np.random.seed(SEED)
 
 @hydra.main(config_path="./config", config_name="retrieval", version_base=None)
 def main(config):
-    config = config.retrieval
 
     # 0. logger
     logger = WandbLogger(project=config.wandb.project) if config.wandb.enable else None

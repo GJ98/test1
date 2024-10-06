@@ -62,3 +62,9 @@
 
 
 validation에 loss 추가하기
+
+
+tfidf-모델명 정하기
+dense-search 구현하기
+dense파일명
+mrc 파일명

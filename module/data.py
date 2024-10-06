@@ -44,9 +44,9 @@ class MrcDataModule(pl.LightningDataModule):
             self.test_dataset = self.get_dataset(self.test_examples, self.prepare_validation_features)
             print(self.test_dataset)
 
-    def get_dataset(self, examples, preprocess_func):
+    def get_dataset(self, examples, preprocess_func=None):
         return examples.map(
-            preprocess_func,
+            self.prepare_validation_features if not preprocess_func else preprocess_func,
             batched=True,
             num_proc=self.config.data.preprocessing_num_workers,
             remove_columns=examples.column_names

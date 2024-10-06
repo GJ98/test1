@@ -44,27 +44,32 @@ class TfIdfRetrieval:
 
     def fit(self, ):
         parent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        tfidfv_model_path = f"{parent_directory}/{self.config.tfidf.model_path}"
+        tfidf_model_dir = f"{parent_directory}/tfidf"
+        tfidf_model_path = f"{tfidf_model_dir}/{self.config.tfidf.model_file_name}"
 
-        if os.path.isfile(tfidfv_model_path):
-            with open(tfidfv_model_path, "rb") as file:
+        if os.path.isfile(tfidf_model_path):
+            with open(tfidf_model_path, "rb") as file:
                 self.vectorizer = pickle.load(file)
         else:
             self.vectorizer.fit(self.contexts)
-            with open(tfidfv_model_path, "wb") as file:
+            if not os.path.isdir(tfidf_model_dir):
+                os.makedirs(tfidf_model_dir)
+            with open(tfidf_model_path, "wb") as file:
                 pickle.dump(self.vectorizer, file)
 
     def create_embedding_vector(self, ):
         parent_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        tfidfv_emb_path = f"{parent_directory}/{self.config.tfidf.emb_path}"
+        tfidf_emb_dir = f"{parent_directory}/tfidf"
+        tfidf_emb_path = f"{tfidf_emb_dir}/{self.config.tfidf.emb_file_name}"
 
-        if os.path.isfile(tfidfv_emb_path):
-            with open(tfidfv_emb_path, "rb") as file:
+        if os.path.isfile(tfidf_emb_path):
+            with open(tfidf_emb_path, "rb") as file:
                 self.sparse_embedding_matrix = pickle.load(file)
-
         else:
             self.sparse_embedding_matrix = self.vectorizer.transform(self.contexts)
-            with open(tfidfv_emb_path, "wb") as file:
+            if not os.path.isdir(tfidf_emb_dir):
+                os.makedirs(tfidf_emb_dir)
+            with open(tfidf_emb_path, "wb") as file:
                 pickle.dump(self.sparse_embedding_matrix, file)
         
     def search(self, query, k=1):
@@ -85,6 +90,7 @@ class DenseRetrieval(pl.LightningModule):
 
     def __init__(self, config, q_encoder, p_encoder):
         super().__init__()
+        self.save_hyperparameters()
         self.config = config
         self.tokenizer = AutoTokenizer.from_pretrained(self.config.model.plm_name)
         self.q_encoder = q_encoder.to(self.config.device)

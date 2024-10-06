@@ -1,3 +1,4 @@
+# config/config.yaml
 defaults:
-  - mrc
-  - retrieval
+  - mrc@mrc
+  - retrieval@retrieval
