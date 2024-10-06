@@ -228,11 +228,12 @@ class MrcLightningModule(pl.LightningModule):
             for pred in predictions:
                 offsets = pred.pop("offsets")
                 pred["text"] = context[offsets[0] : offsets[1]]
+                pred["start"] = offsets[0]
 
             # In the very rare edge case we have not a single non-null prediction, we create a fake prediction to avoid
             # failure.
             if len(predictions) == 0 or (len(predictions) == 1 and predictions[0]["text"] == ""):
-                predictions.insert(0, {"text": "empty", "start_logit": 0.0, "end_logit": 0.0, "score": 0.0})
+                predictions.insert(0, {"text": "empty", "start_logit": 0.0, "end_logit": 0.0, "score": 0.0, "start": 0})
 
             # Compute the softmax of all scores (we do it with numpy to stay independent from torch/tf in this file, using
             # the LogSumExp trick).
@@ -285,14 +286,14 @@ class MrcLightningModule(pl.LightningModule):
                 )
 
             logger.info(f"Saving predictions to {prediction_file}.")
-            with open(prediction_file, "w") as writer:
-                writer.write(json.dumps(all_predictions, indent=4) + "\n")
+            with open(prediction_file, "w", encoding="utf-8") as writer:
+                writer.write(json.dumps(all_predictions, indent=4, ensure_ascii=False) + "\n")
             logger.info(f"Saving nbest_preds to {nbest_file}.")
-            with open(nbest_file, "w") as writer:
-                writer.write(json.dumps(all_nbest_json, indent=4) + "\n")
+            with open(nbest_file, "w", encoding="utf-8") as writer:
+                writer.write(json.dumps(all_nbest_json, indent=4, ensure_ascii=False) + "\n")
             if version_2_with_negative:
                 logger.info(f"Saving null_odds to {null_odds_file}.")
-                with open(null_odds_file, "w") as writer:
-                    writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
+                with open(null_odds_file, "w", encoding="utf-8") as writer:
+                    writer.write(json.dumps(scores_diff_json, indent=4, ensure_ascii=False) + "\n")
 
         return all_predictions
